@@ -25,7 +25,7 @@ public class ClientRoutine implements Runnable {
             socketWriter = new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream()));
 
             String fileName = dataInputStream.readUTF();
-            final long fileSize = Long.parseLong(dataInputStream.readUTF());
+            final long fileSize = dataInputStream.readLong();
             filePath = FileWorker.getFilePath("uploads\\" + fileName);
             OutputStream fileOutputStream = FileWorker.getOutputStream(filePath);
             if (filePath == null || fileOutputStream == null) {
