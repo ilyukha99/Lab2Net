@@ -7,9 +7,9 @@ import java.nio.file.Path;
 
 public class ClientRoutine implements Runnable {
     private final Socket clientSocket;
-    private BufferedReader socketReader;
+    private DataInputStream dataInputStream;
     private BufferedWriter socketWriter;
-    private final char[] buffer = new char[4200];
+    private final byte[] buffer = new byte[512];
     private Path filePath;
     private final int clientNumber;
 
@@ -21,32 +21,33 @@ public class ClientRoutine implements Runnable {
     @Override
     public void run() {
         try {
-            socketReader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+            dataInputStream = new DataInputStream(clientSocket.getInputStream());
             socketWriter = new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream()));
 
-            String fileName = socketReader.readLine();
-            final long fileSize = Long.parseLong(socketReader.readLine());
+            String fileName = dataInputStream.readUTF();
+            final long fileSize = Long.parseLong(dataInputStream.readUTF());
             filePath = FileWorker.getFilePath("uploads\\" + fileName);
-            BufferedWriter fileWriter = FileWorker.getWriter(filePath);
-            if (filePath == null || fileWriter == null) {
+            OutputStream fileOutputStream = FileWorker.getOutputStream(filePath);
+            if (filePath == null || fileOutputStream == null) {
                 socketWriter.write("Failure");
                 return;
             }
 
             int tmp;
             boolean flag = false;
-            long bytes = 0, initialTime = System.nanoTime(), lastTime = initialTime, lastBytesAmount = bytes;
+            long bytes = 0, initialNanoTime = System.nanoTime(), lastBytesAmount = 0,
+                    initialTime = System.currentTimeMillis(), lastTime = initialTime;
             while (bytes < fileSize) {
-                tmp = socketReader.read(buffer, 0, 4096);
+                tmp = dataInputStream.read(buffer, 0, 512);
 
                 if (tmp >= 0) {
-                    fileWriter.write(buffer, 0, tmp);
+                    fileOutputStream.write(buffer, 0, tmp);
                 }
                 bytes += tmp;
 
                 if (System.currentTimeMillis() - lastTime > 3000) {
                     println("#" + clientNumber + ": instant speed = " + (bytes - lastBytesAmount) * 8 / 3000 + " Kbps, "
-                      + "average speed = " + bytes * 8_000_000 / ((System.nanoTime() - initialTime)) + " Kbps");
+                      + "average speed = " + bytes * 8 / ((System.currentTimeMillis() - initialTime)) + " Kbps");
                     lastTime = System.currentTimeMillis();
                     lastBytesAmount = bytes;
                     flag = true;
@@ -54,9 +55,9 @@ public class ClientRoutine implements Runnable {
             }
             if (!flag) {
                 println("#" + clientNumber + ": instant speed = " + bytes * 8_000_000 /
-                        (System.nanoTime() - initialTime) + " Kbps");
+                        (System.nanoTime() - initialNanoTime) + " Kbps");
             }
-            fileWriter.flush();
+            fileOutputStream.flush();
 
             String status;
             if (Files.size(filePath) != fileSize) {
@@ -74,12 +75,12 @@ public class ClientRoutine implements Runnable {
 
         catch (IOException | ArithmeticException exc) {
             println("Client #" + clientNumber + ", IP: " + clientSocket.getInetAddress() +
-                "was terminated with exception: " + exc.getMessage());
+                " was terminated with exception: " + exc.getMessage());
         }
 
         finally {
             try {
-                socketReader.close();
+                dataInputStream.close();
                 socketWriter.close();
                 if (!clientSocket.isClosed()) {
                     clientSocket.close();

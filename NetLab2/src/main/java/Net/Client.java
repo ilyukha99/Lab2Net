@@ -7,14 +7,14 @@ import java.nio.file.Files;
 
 public class Client {
     private static final Socket clientSocket = new Socket();
-    private static BufferedWriter socketWriter;
+    private static DataOutputStream socketOutputStream;
     private static BufferedReader socketReader;
-    private static final char[] sendBuffer = new char[4200];
+    private static final byte[] sendBuffer = new byte[512];
 
     public static void start() throws IOException {
-        try (BufferedReader fileReader = FileWorker.getReader(Parser.path)) {
+        try (InputStream inputStream = FileWorker.getInputStream(Parser.path)) {
 
-            if (fileReader == null) {
+            if (inputStream == null) {
                 System.err.println("File problems detected.");
                 return;
             }
@@ -24,7 +24,7 @@ public class Client {
                     if (!clientSocket.isClosed()) {
                         clientSocket.close();
                     }
-                    socketWriter.close();
+                    socketOutputStream.close();
                     socketReader.close();
                     System.out.println("Terminated.");
                 }
@@ -35,25 +35,25 @@ public class Client {
 
             clientSocket.connect(new InetSocketAddress(Parser.serverAddress, Parser.port));
             System.out.println("Connected.");
-            socketWriter = new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream()));
+            socketOutputStream = new DataOutputStream(clientSocket.getOutputStream());
             socketReader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 
             long fileSize = Files.size(Parser.path);
-            socketWriter.write(Parser.path.getFileName().toString() + "\n");
-            socketWriter.write(fileSize + "\n");
-            socketWriter.flush();
+            socketOutputStream.writeUTF(Parser.path.getFileName().toString());
+            socketOutputStream.writeLong(fileSize);
+            socketOutputStream.flush();
             
             int tmp = 0;
             while (true) {
-                tmp = fileReader.read(sendBuffer, 0, 4096);
+                tmp = inputStream.read(sendBuffer, 0, 512);
                 if (tmp >= 0) {
-                    socketWriter.write(sendBuffer, 0, tmp);
+                    socketOutputStream.write(sendBuffer, 0, tmp);
                 }
                 else {
                     break;
                 }
             }
-            socketWriter.flush(); //flush needs here to avoid dead lock
+            socketOutputStream.flush(); //flush needs here to avoid dead lock
 
             String reply = socketReader.readLine();
             switch (reply) {
@@ -64,7 +64,7 @@ public class Client {
             if (!clientSocket.isClosed()) {
                 clientSocket.close();
             }
-            socketWriter.close();
+            socketOutputStream.close();
             socketReader.close();
         }
     }
